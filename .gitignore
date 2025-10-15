@@ -1,0 +1,52 @@
+# Environment files
+.env
+.env.local
+.env.production.local
+*.csv
+
+# AWS credentials
+.aws/
+credentials.csv
+*_credentials.csv
+
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+dist/
+build/
+*.zip
+lambda.zip
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+backend/data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+bootstrap
+
+# Logs
+*.log
+logs/
