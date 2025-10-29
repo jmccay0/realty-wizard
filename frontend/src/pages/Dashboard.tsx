@@ -120,7 +120,7 @@ function Dashboard() {
             {summary.property && !summary.contract && (
               <button
                 className="btn-primary"
-                onClick={() => alert('Contract entry form coming soon!')}
+                onClick={() => navigate(`/project/${id}/contract/new`)}
               >
                 Enter Contract Terms
               </button>
@@ -128,7 +128,7 @@ function Dashboard() {
             <button className="btn-secondary" onClick={() => navigate(`/project/${id}/wizard`)}>
               Edit Property Details
             </button>
-            <button className="btn-secondary" onClick={() => alert('Document generation coming in Phase 2!')}>
+            <button className="btn-secondary" onClick={() => navigate(`/project/${id}/documents`)}>
               View Documents
             </button>
           </div>

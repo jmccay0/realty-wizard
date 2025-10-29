@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { listProjects } from '../api';
 import type { Project } from '../types';
 
 function Home() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -23,14 +25,33 @@ function Home() {
     }
   };
 
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 20px' }}>
       {/* Header */}
-      <div style={{ marginBottom: '40px' }}>
-        <h1 style={{ fontSize: '32px', marginBottom: '8px' }}>Realty Wizard</h1>
-        <p style={{ color: 'var(--realwiz-gray-600)', fontSize: '18px' }}>
-          Your guide through Texas real estate transactions
-        </p>
+      <div style={{ marginBottom: '40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1 style={{ fontSize: '32px', marginBottom: '8px' }}>Realty Wizard</h1>
+          <p style={{ color: 'var(--realwiz-gray-600)', fontSize: '18px' }}>
+            Your guide through Texas real estate transactions
+          </p>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <p style={{ fontSize: '14px', color: 'var(--realwiz-gray-600)', marginBottom: '8px' }}>
+            {user?.name} ({user?.default_role})
+          </p>
+          <button
+            className="btn-secondary"
+            onClick={handleLogout}
+            style={{ fontSize: '14px', padding: '6px 12px' }}
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
       {/* Legal disclaimer banner */}

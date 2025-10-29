@@ -7,6 +7,23 @@ import (
 // Storage defines the interface for data persistence
 // This clean interface makes testing easy and allows swapping implementations
 type Storage interface {
+	// User operations
+	CreateUser(user *models.User) error
+	GetUser(id string) (*models.User, error)
+	GetUserByEmail(email string) (*models.User, error)
+
+	// Refresh token operations
+	CreateRefreshToken(token *models.RefreshToken) error
+	GetRefreshToken(token string) (*models.RefreshToken, error)
+	RevokeRefreshToken(token string) error
+	DeleteExpiredRefreshTokens() error
+
+	// Project participant operations
+	CreateProjectParticipant(participant *models.ProjectParticipant) error
+	GetProjectParticipant(projectID, userID string) (*models.ProjectParticipant, error)
+	ListProjectParticipants(projectID string) ([]*models.ProjectParticipant, error)
+	ListUserProjects(userID string) ([]*models.Project, error)
+
 	// Project operations
 	CreateProject(project *models.Project) error
 	GetProject(id string) (*models.Project, error)

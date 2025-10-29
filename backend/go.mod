@@ -1,6 +1,6 @@
 module github.com/jessicaandtommymccay/realty-wizard/backend
 
-go 1.21
+go 1.24.0
 
 require (
 	github.com/go-chi/chi/v5 v5.0.11
@@ -15,12 +15,15 @@ require (
 	github.com/awslabs/aws-lambda-go-api-proxy v0.16.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
+	github.com/jung-kurt/gofpdf v1.16.2 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	golang.org/x/crypto v0.43.0 // indirect
 	golang.org/x/mod v0.3.0 // indirect
-	golang.org/x/sys v0.16.0 // indirect
+	golang.org/x/sys v0.37.0 // indirect
 	golang.org/x/tools v0.0.0-20201124115921-2c860bdd6e78 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

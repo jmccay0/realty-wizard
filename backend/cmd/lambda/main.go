@@ -103,6 +103,8 @@ func init() {
 
 		// Documents
 		r.Get("/projects/{id}/documents", h.ListDocuments)
+		r.Post("/projects/{id}/documents/generate", h.GenerateDocument)
+		r.Get("/documents/{id}/download", h.DownloadDocument)
 	})
 
 	// Create Lambda adapter
