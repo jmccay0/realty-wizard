@@ -33,6 +33,34 @@ func NewSQLiteStorage(dbPath string) (*SQLiteStorage, error) {
 // migrate creates the database schema
 func (s *SQLiteStorage) migrate() error {
 	schema := `
+	CREATE TABLE IF NOT EXISTS users (
+		id TEXT PRIMARY KEY,
+		email TEXT UNIQUE NOT NULL,
+		password_hash TEXT NOT NULL,
+		name TEXT NOT NULL,
+		phone TEXT NOT NULL,
+		default_role TEXT NOT NULL,
+		created_at DATETIME NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS refresh_tokens (
+		token TEXT PRIMARY KEY,
+		user_id TEXT NOT NULL,
+		expires_at DATETIME NOT NULL,
+		revoked BOOLEAN DEFAULT 0,
+		FOREIGN KEY (user_id) REFERENCES users(id)
+	);
+
+	CREATE TABLE IF NOT EXISTS project_participants (
+		project_id TEXT NOT NULL,
+		user_id TEXT NOT NULL,
+		role TEXT NOT NULL,
+		created_at DATETIME NOT NULL,
+		PRIMARY KEY (project_id, user_id),
+		FOREIGN KEY (project_id) REFERENCES projects(id),
+		FOREIGN KEY (user_id) REFERENCES users(id)
+	);
+
 	CREATE TABLE IF NOT EXISTS projects (
 		id TEXT PRIMARY KEY,
 		created_at DATETIME NOT NULL,
@@ -45,7 +73,9 @@ func (s *SQLiteStorage) migrate() error {
 		agent_name TEXT,
 		title_company TEXT,
 		target_list_date DATETIME,
-		status TEXT NOT NULL
+		status TEXT NOT NULL,
+		owner_user_id TEXT,
+		FOREIGN KEY (owner_user_id) REFERENCES users(id)
 	);
 
 	CREATE TABLE IF NOT EXISTS properties (
@@ -134,6 +164,10 @@ func (s *SQLiteStorage) migrate() error {
 		FOREIGN KEY (project_id) REFERENCES projects(id)
 	);
 
+	CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+	CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
+	CREATE INDEX IF NOT EXISTS idx_project_participants_user ON project_participants(user_id);
+	CREATE INDEX IF NOT EXISTS idx_projects_owner ON projects(owner_user_id);
 	CREATE INDEX IF NOT EXISTS idx_properties_project ON properties(project_id);
 	CREATE INDEX IF NOT EXISTS idx_disclosures_project ON disclosures(project_id);
 	CREATE INDEX IF NOT EXISTS idx_contracts_project ON contracts(project_id);
@@ -150,10 +184,10 @@ func (s *SQLiteStorage) CreateProject(p *models.Project) error {
 	sellerNamesJSON, _ := json.Marshal(p.SellerNames)
 	_, err := s.db.Exec(`
 		INSERT INTO projects (id, created_at, updated_at, property_address, seller_names,
-			seller_email, seller_phone, has_agent, agent_name, title_company, target_list_date, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			seller_email, seller_phone, has_agent, agent_name, title_company, target_list_date, status, owner_user_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		p.ID, p.CreatedAt, p.UpdatedAt, p.PropertyAddress, sellerNamesJSON,
-		p.SellerEmail, p.SellerPhone, p.HasAgent, p.AgentName, p.TitleCompany, p.TargetListDate, p.Status)
+		p.SellerEmail, p.SellerPhone, p.HasAgent, p.AgentName, p.TitleCompany, p.TargetListDate, p.Status, p.OwnerUserID)
 	return err
 }
 
@@ -162,13 +196,14 @@ func (s *SQLiteStorage) GetProject(id string) (*models.Project, error) {
 	var p models.Project
 	var sellerNamesJSON string
 	var targetListDate sql.NullTime
+	var ownerUserID sql.NullString
 
 	err := s.db.QueryRow(`
 		SELECT id, created_at, updated_at, property_address, seller_names,
-			seller_email, seller_phone, has_agent, agent_name, title_company, target_list_date, status
+			seller_email, seller_phone, has_agent, agent_name, title_company, target_list_date, status, owner_user_id
 		FROM projects WHERE id = ?`, id).Scan(
 		&p.ID, &p.CreatedAt, &p.UpdatedAt, &p.PropertyAddress, &sellerNamesJSON,
-		&p.SellerEmail, &p.SellerPhone, &p.HasAgent, &p.AgentName, &p.TitleCompany, &targetListDate, &p.Status)
+		&p.SellerEmail, &p.SellerPhone, &p.HasAgent, &p.AgentName, &p.TitleCompany, &targetListDate, &p.Status, &ownerUserID)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -181,6 +216,9 @@ func (s *SQLiteStorage) GetProject(id string) (*models.Project, error) {
 	if targetListDate.Valid {
 		p.TargetListDate = &targetListDate.Time
 	}
+	if ownerUserID.Valid {
+		p.OwnerUserID = &ownerUserID.String
+	}
 
 	return &p, nil
 }
@@ -192,10 +230,10 @@ func (s *SQLiteStorage) UpdateProject(p *models.Project) error {
 	_, err := s.db.Exec(`
 		UPDATE projects SET updated_at = ?, property_address = ?, seller_names = ?,
 			seller_email = ?, seller_phone = ?, has_agent = ?, agent_name = ?,
-			title_company = ?, target_list_date = ?, status = ?
+			title_company = ?, target_list_date = ?, status = ?, owner_user_id = ?
 		WHERE id = ?`,
 		p.UpdatedAt, p.PropertyAddress, sellerNamesJSON, p.SellerEmail, p.SellerPhone,
-		p.HasAgent, p.AgentName, p.TitleCompany, p.TargetListDate, p.Status, p.ID)
+		p.HasAgent, p.AgentName, p.TitleCompany, p.TargetListDate, p.Status, p.OwnerUserID, p.ID)
 	return err
 }
 
@@ -203,7 +241,7 @@ func (s *SQLiteStorage) UpdateProject(p *models.Project) error {
 func (s *SQLiteStorage) ListProjects() ([]*models.Project, error) {
 	rows, err := s.db.Query(`
 		SELECT id, created_at, updated_at, property_address, seller_names,
-			seller_email, seller_phone, has_agent, agent_name, title_company, target_list_date, status
+			seller_email, seller_phone, has_agent, agent_name, title_company, target_list_date, status, owner_user_id
 		FROM projects ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -215,9 +253,10 @@ func (s *SQLiteStorage) ListProjects() ([]*models.Project, error) {
 		var p models.Project
 		var sellerNamesJSON string
 		var targetListDate sql.NullTime
+		var ownerUserID sql.NullString
 
 		err := rows.Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt, &p.PropertyAddress, &sellerNamesJSON,
-			&p.SellerEmail, &p.SellerPhone, &p.HasAgent, &p.AgentName, &p.TitleCompany, &targetListDate, &p.Status)
+			&p.SellerEmail, &p.SellerPhone, &p.HasAgent, &p.AgentName, &p.TitleCompany, &targetListDate, &p.Status, &ownerUserID)
 		if err != nil {
 			return nil, err
 		}
@@ -225,6 +264,9 @@ func (s *SQLiteStorage) ListProjects() ([]*models.Project, error) {
 		json.Unmarshal([]byte(sellerNamesJSON), &p.SellerNames)
 		if targetListDate.Valid {
 			p.TargetListDate = &targetListDate.Time
+		}
+		if ownerUserID.Valid {
+			p.OwnerUserID = &ownerUserID.String
 		}
 
 		projects = append(projects, &p)
@@ -540,6 +582,183 @@ func (s *SQLiteStorage) UpdateDocument(doc *models.Document) error {
 		WHERE id = ?`,
 		doc.Type, doc.FormNumber, doc.Status, doc.GeneratedAt, doc.FilePath, doc.ID)
 	return err
+}
+
+// CreateUser inserts a new user
+func (s *SQLiteStorage) CreateUser(user *models.User) error {
+	_, err := s.db.Exec(`
+		INSERT INTO users (id, email, password_hash, name, phone, default_role, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		user.ID, user.Email, user.PasswordHash, user.Name, user.Phone, user.DefaultRole, user.CreatedAt)
+	return err
+}
+
+// GetUser retrieves a user by ID
+func (s *SQLiteStorage) GetUser(id string) (*models.User, error) {
+	var user models.User
+	err := s.db.QueryRow(`
+		SELECT id, email, password_hash, name, phone, default_role, created_at
+		FROM users WHERE id = ?`, id).Scan(
+		&user.ID, &user.Email, &user.PasswordHash, &user.Name, &user.Phone, &user.DefaultRole, &user.CreatedAt)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+// GetUserByEmail retrieves a user by email
+func (s *SQLiteStorage) GetUserByEmail(email string) (*models.User, error) {
+	var user models.User
+	err := s.db.QueryRow(`
+		SELECT id, email, password_hash, name, phone, default_role, created_at
+		FROM users WHERE email = ?`, email).Scan(
+		&user.ID, &user.Email, &user.PasswordHash, &user.Name, &user.Phone, &user.DefaultRole, &user.CreatedAt)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+// CreateRefreshToken stores a new refresh token
+func (s *SQLiteStorage) CreateRefreshToken(token *models.RefreshToken) error {
+	_, err := s.db.Exec(`
+		INSERT INTO refresh_tokens (token, user_id, expires_at, revoked)
+		VALUES (?, ?, ?, ?)`,
+		token.Token, token.UserID, token.ExpiresAt, token.Revoked)
+	return err
+}
+
+// GetRefreshToken retrieves a refresh token
+func (s *SQLiteStorage) GetRefreshToken(token string) (*models.RefreshToken, error) {
+	var rt models.RefreshToken
+	err := s.db.QueryRow(`
+		SELECT token, user_id, expires_at, revoked
+		FROM refresh_tokens WHERE token = ?`, token).Scan(
+		&rt.Token, &rt.UserID, &rt.ExpiresAt, &rt.Revoked)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("refresh token not found")
+		}
+		return nil, err
+	}
+
+	return &rt, nil
+}
+
+// RevokeRefreshToken marks a refresh token as revoked
+func (s *SQLiteStorage) RevokeRefreshToken(token string) error {
+	_, err := s.db.Exec(`UPDATE refresh_tokens SET revoked = 1 WHERE token = ?`, token)
+	return err
+}
+
+// DeleteExpiredRefreshTokens removes expired tokens
+func (s *SQLiteStorage) DeleteExpiredRefreshTokens() error {
+	_, err := s.db.Exec(`DELETE FROM refresh_tokens WHERE expires_at < ?`, time.Now())
+	return err
+}
+
+// CreateProjectParticipant adds a participant to a project
+func (s *SQLiteStorage) CreateProjectParticipant(participant *models.ProjectParticipant) error {
+	_, err := s.db.Exec(`
+		INSERT INTO project_participants (project_id, user_id, role, created_at)
+		VALUES (?, ?, ?, ?)`,
+		participant.ProjectID, participant.UserID, participant.Role, participant.CreatedAt)
+	return err
+}
+
+// GetProjectParticipant retrieves a specific participant
+func (s *SQLiteStorage) GetProjectParticipant(projectID, userID string) (*models.ProjectParticipant, error) {
+	var participant models.ProjectParticipant
+	err := s.db.QueryRow(`
+		SELECT project_id, user_id, role, created_at
+		FROM project_participants WHERE project_id = ? AND user_id = ?`, projectID, userID).Scan(
+		&participant.ProjectID, &participant.UserID, &participant.Role, &participant.CreatedAt)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("participant not found")
+		}
+		return nil, err
+	}
+
+	return &participant, nil
+}
+
+// ListProjectParticipants retrieves all participants for a project
+func (s *SQLiteStorage) ListProjectParticipants(projectID string) ([]*models.ProjectParticipant, error) {
+	rows, err := s.db.Query(`
+		SELECT project_id, user_id, role, created_at
+		FROM project_participants WHERE project_id = ?`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var participants []*models.ProjectParticipant
+	for rows.Next() {
+		var participant models.ProjectParticipant
+		err := rows.Scan(&participant.ProjectID, &participant.UserID, &participant.Role, &participant.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		participants = append(participants, &participant)
+	}
+
+	return participants, nil
+}
+
+// ListUserProjects retrieves all projects where user is a participant
+func (s *SQLiteStorage) ListUserProjects(userID string) ([]*models.Project, error) {
+	rows, err := s.db.Query(`
+		SELECT p.id, p.created_at, p.updated_at, p.property_address, p.seller_names,
+			p.seller_email, p.seller_phone, p.has_agent, p.agent_name, p.title_company,
+			p.target_list_date, p.status, p.owner_user_id
+		FROM projects p
+		INNER JOIN project_participants pp ON p.id = pp.project_id
+		WHERE pp.user_id = ?
+		ORDER BY p.created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var projects []*models.Project
+	for rows.Next() {
+		var p models.Project
+		var sellerNamesJSON string
+		var targetListDate sql.NullTime
+		var ownerUserID sql.NullString
+
+		err := rows.Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt, &p.PropertyAddress, &sellerNamesJSON,
+			&p.SellerEmail, &p.SellerPhone, &p.HasAgent, &p.AgentName, &p.TitleCompany,
+			&targetListDate, &p.Status, &ownerUserID)
+		if err != nil {
+			return nil, err
+		}
+
+		json.Unmarshal([]byte(sellerNamesJSON), &p.SellerNames)
+		if targetListDate.Valid {
+			p.TargetListDate = &targetListDate.Time
+		}
+		if ownerUserID.Valid {
+			p.OwnerUserID = &ownerUserID.String
+		}
+
+		projects = append(projects, &p)
+	}
+
+	return projects, nil
 }
 
 // Close closes the database connection

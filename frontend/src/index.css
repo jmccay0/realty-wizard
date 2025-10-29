@@ -268,3 +268,9 @@ h1, h2, h3, h4, h5, h6 {
   background-color: var(--realwiz-light-green);
   border-left: 4px solid var(--realwiz-green);
 }
+
+.alert-error {
+  background-color: #FFEBEE;
+  border-left: 4px solid var(--realwiz-red);
+  color: #C62828;
+}

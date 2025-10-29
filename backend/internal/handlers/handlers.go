@@ -7,6 +7,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jessicaandtommymccay/realty-wizard/backend/internal/auth"
+	"github.com/jessicaandtommymccay/realty-wizard/backend/internal/documents"
 	"github.com/jessicaandtommymccay/realty-wizard/backend/internal/models"
 	"github.com/jessicaandtommymccay/realty-wizard/backend/internal/rules"
 	"github.com/jessicaandtommymccay/realty-wizard/backend/internal/storage"
@@ -16,13 +18,17 @@ import (
 type Handler struct {
 	storage        storage.Storage
 	deadlineEngine *rules.DeadlineEngine
+	docGenerator   *documents.Generator
+	jwtManager     *auth.JWTManager
 }
 
 // NewHandler creates a new handler with dependencies
-func NewHandler(store storage.Storage) *Handler {
+func NewHandler(store storage.Storage, jwtSecret string) *Handler {
 	return &Handler{
 		storage:        store,
 		deadlineEngine: rules.NewDeadlineEngine(),
+		docGenerator:   documents.NewGenerator(),
+		jwtManager:     auth.NewJWTManager(jwtSecret),
 	}
 }
 
@@ -54,9 +60,30 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		req.Status = "setup"
 	}
 
+	// Get user from context (if auth is enabled)
+	var userID string
+	if user, ok := r.Context().Value("user").(*models.User); ok {
+		userID = user.ID
+		req.OwnerUserID = &userID
+	}
+
 	if err := h.storage.CreateProject(&req); err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to create project")
 		return
+	}
+
+	// If auth is enabled, add user as owner participant
+	if userID != "" {
+		participant := &models.ProjectParticipant{
+			ProjectID: req.ID,
+			UserID:    userID,
+			Role:      "owner",
+			CreatedAt: time.Now(),
+		}
+		if err := h.storage.CreateProjectParticipant(participant); err != nil {
+			// Log error but don't fail the request
+			// The project was created successfully
+		}
 	}
 
 	respondJSON(w, http.StatusCreated, req)
@@ -77,7 +104,18 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 
 // ListProjects handles GET /api/projects
 func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
-	projects, err := h.storage.ListProjects()
+	// If auth is enabled, filter by user's projects
+	var projects []*models.Project
+	var err error
+
+	if user, ok := r.Context().Value("user").(*models.User); ok {
+		// Auth enabled - get only user's projects
+		projects, err = h.storage.ListUserProjects(user.ID)
+	} else {
+		// Auth disabled - get all projects
+		projects, err = h.storage.ListProjects()
+	}
+
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to list projects")
 		return
@@ -333,6 +371,116 @@ func (h *Handler) ListDocuments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, documents)
+}
+
+// GenerateDocument handles POST /api/projects/:id/documents/generate
+func (h *Handler) GenerateDocument(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "id")
+
+	var req struct {
+		Type string `json:"type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Load project data
+	project, err := h.storage.GetProject(projectID)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "Project not found")
+		return
+	}
+
+	property, _ := h.storage.GetProperty(projectID)
+	disclosure, _ := h.storage.GetDisclosure(projectID)
+	contract, _ := h.storage.GetContract(projectID)
+
+	// Check if document type is applicable
+	templates := h.docGenerator.AvailableTemplates()
+	var template *documents.DocumentTemplate
+	for _, t := range templates {
+		if t.Type == req.Type {
+			template = &t
+			break
+		}
+	}
+
+	if template == nil {
+		respondError(w, http.StatusBadRequest, "Unknown document type")
+		return
+	}
+
+	if !template.Condition(project, property, contract) {
+		respondError(w, http.StatusBadRequest, "Document not applicable to this project")
+		return
+	}
+
+	// Create document record
+	doc := &models.Document{
+		ID:         uuid.New().String(),
+		ProjectID:  projectID,
+		Type:       req.Type,
+		FormNumber: template.FormNumber,
+		Status:     "draft",
+	}
+
+	// Generate PDF
+	pdfBytes, err := h.docGenerator.GeneratePDF(doc, project, property, disclosure, contract)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to generate document")
+		return
+	}
+
+	// In production, save PDF to file storage (S3, etc.)
+	// For now, we'll just mark it as generated
+	now := time.Now()
+	doc.GeneratedAt = &now
+	doc.FilePath = "/documents/" + doc.ID + ".pdf"
+	doc.Status = "ready"
+
+	// Save document record
+	if err := h.storage.CreateDocument(doc); err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to save document")
+		return
+	}
+
+	// Return document info with PDF data
+	response := map[string]interface{}{
+		"document": doc,
+		"pdf":      pdfBytes,
+	}
+
+	respondJSON(w, http.StatusCreated, response)
+}
+
+// DownloadDocument handles GET /api/documents/:id/download
+func (h *Handler) DownloadDocument(w http.ResponseWriter, r *http.Request) {
+	docID := chi.URLParam(r, "id")
+
+	doc, err := h.storage.GetDocument(docID)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "Document not found")
+		return
+	}
+
+	// Load project data
+	project, _ := h.storage.GetProject(doc.ProjectID)
+	property, _ := h.storage.GetProperty(doc.ProjectID)
+	disclosure, _ := h.storage.GetDisclosure(doc.ProjectID)
+	contract, _ := h.storage.GetContract(doc.ProjectID)
+
+	// Regenerate PDF (in production, load from file storage)
+	pdfBytes, err := h.docGenerator.GeneratePDF(doc, project, property, disclosure, contract)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to generate PDF")
+		return
+	}
+
+	// Set headers for PDF download
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", "attachment; filename="+doc.Type+".pdf")
+	w.Write(pdfBytes)
 }
 
 // GetProjectSummary handles GET /api/projects/:id/summary

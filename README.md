@@ -1,6 +1,13 @@
-# Realty Wizard - Texas Real Estate Transaction Guide
+# RealtyWizard - Texas Real Estate Transaction Management
 
 A TurboTax-style application for guiding Texas home sellers through residential resale transactions.
+
+## ✨ New in v2.0: User Authentication & Multi-Participant Support
+
+- Secure JWT-based authentication
+- Role-based access (buyer/seller/admin)
+- Multi-participant transactions
+- Project-specific roles
 
 ## Project Structure
 
@@ -54,14 +61,33 @@ realty-wizard/
 ```bash
 cd backend
 go mod download
+
+# Optional: Copy environment file
+cp .env.example .env
+# Edit .env with your JWT_SECRET
+
+# Seed database with admin user
+go run cmd/seed/main.go
+
+# Start server
 go run cmd/api/main.go
 # Server runs on http://localhost:8080
 ```
+
+**Default Admin Credentials:**
+- Email: `admin@realwiz.local`
+- Password: `admin123`
+- **⚠️ Change password after first login!**
 
 #### Frontend Setup
 ```bash
 cd frontend
 npm install
+
+# Optional: Copy environment file
+cp .env.example .env
+
+# Start dev server
 npm run dev
 # Dev server runs on http://localhost:5173
 ```
