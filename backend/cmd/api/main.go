@@ -9,29 +9,72 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/jessicaandtommymccay/realty-wizard/backend/internal/auth"
 	"github.com/jessicaandtommymccay/realty-wizard/backend/internal/handlers"
+	mw "github.com/jessicaandtommymccay/realty-wizard/backend/internal/middleware"
 	"github.com/jessicaandtommymccay/realty-wizard/backend/internal/storage"
 )
 
 func main() {
-	// Ensure data directory exists
-	dataDir := "data"
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		log.Fatalf("Failed to create data directory: %v", err)
+	// Load environment variables
+	authEnabled := os.Getenv("AUTH_ENABLED")
+	if authEnabled == "" {
+		authEnabled = "true" // Default to enabled
+		os.Setenv("AUTH_ENABLED", "true")
 	}
 
-	// Initialize storage
-	dbPath := filepath.Join(dataDir, "realty-wizard.db")
-	store, err := storage.NewSQLiteStorage(dbPath)
-	if err != nil {
-		log.Fatalf("Failed to initialize storage: %v", err)
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "development-secret-key-change-in-production"
+		log.Println("WARNING: Using default JWT_SECRET. Set JWT_SECRET environment variable in production.")
+	}
+
+	// Initialize storage based on DB_TYPE
+	dbType := os.Getenv("DB_TYPE")
+	if dbType == "" {
+		dbType = "sqlite" // Default to SQLite
+	}
+
+	var store storage.Storage
+	var err error
+
+	switch dbType {
+	case "postgres":
+		postgresURL := os.Getenv("POSTGRES_URL")
+		if postgresURL == "" {
+			log.Fatal("POSTGRES_URL environment variable required when DB_TYPE=postgres")
+		}
+		store, err = storage.NewPostgresStorage(postgresURL)
+		if err != nil {
+			log.Fatalf("Failed to initialize PostgreSQL storage: %v", err)
+		}
+		log.Printf("PostgreSQL database initialized")
+	case "sqlite":
+		// Ensure data directory exists
+		dataDir := "data"
+		if err := os.MkdirAll(dataDir, 0755); err != nil {
+			log.Fatalf("Failed to create data directory: %v", err)
+		}
+
+		dbPath := os.Getenv("DB_PATH")
+		if dbPath == "" {
+			dbPath = filepath.Join(dataDir, "realty-wizard.db")
+		}
+		store, err = storage.NewSQLiteStorage(dbPath)
+		if err != nil {
+			log.Fatalf("Failed to initialize SQLite storage: %v", err)
+		}
+		log.Printf("SQLite database initialized at %s", dbPath)
+	default:
+		log.Fatalf("Invalid DB_TYPE: %s (must be 'sqlite' or 'postgres')", dbType)
 	}
 	defer store.Close()
 
-	log.Printf("Database initialized at %s", dbPath)
+	log.Printf("Auth enabled: %s", authEnabled)
 
-	// Initialize handlers
-	h := handlers.NewHandler(store)
+	// Initialize JWT manager and handlers
+	jwtManager := auth.NewJWTManager(jwtSecret)
+	h := handlers.NewHandler(store, jwtSecret)
 
 	// Setup router
 	r := chi.NewRouter()
@@ -51,39 +94,53 @@ func main() {
 
 	// Routes
 	r.Route("/api", func(r chi.Router) {
-		// Health check
+		// Health check (no auth required)
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("OK"))
 		})
 
-		// Projects
-		r.Get("/projects", h.ListProjects)
-		r.Post("/projects", h.CreateProject)
-		r.Get("/projects/{id}", h.GetProject)
-		r.Put("/projects/{id}", h.UpdateProject)
-		r.Get("/projects/{id}/summary", h.GetProjectSummary)
+		// Auth routes (no auth required)
+		r.Post("/register", h.Register)
+		r.Post("/login", h.Login)
+		r.Post("/refresh", h.RefreshToken)
+		r.Post("/logout", h.Logout)
 
-		// Property (per project)
-		r.Post("/projects/{id}/property", h.CreateProperty)
-		r.Get("/projects/{id}/property", h.GetProperty)
-		r.Put("/projects/{id}/property", h.UpdateProperty)
+		// Protected routes (require authentication)
+		r.Group(func(r chi.Router) {
+			// Apply auth middleware to all routes in this group
+			r.Use(mw.AuthMiddleware(jwtManager, store))
 
-		// Disclosure (per project)
-		r.Post("/projects/{id}/disclosure", h.CreateDisclosure)
-		r.Get("/projects/{id}/disclosure", h.GetDisclosure)
-		r.Put("/projects/{id}/disclosure", h.UpdateDisclosure)
+			// Projects
+			r.Get("/projects", h.ListProjects)
+			r.Post("/projects", h.CreateProject)
+			r.Get("/projects/{id}", h.GetProject)
+			r.Put("/projects/{id}", h.UpdateProject)
+			r.Get("/projects/{id}/summary", h.GetProjectSummary)
 
-		// Contract (per project)
-		r.Post("/projects/{id}/contract", h.CreateContract)
-		r.Get("/projects/{id}/contract", h.GetContract)
+			// Property (per project)
+			r.Post("/projects/{id}/property", h.CreateProperty)
+			r.Get("/projects/{id}/property", h.GetProperty)
+			r.Put("/projects/{id}/property", h.UpdateProperty)
 
-		// Deadlines
-		r.Get("/projects/{id}/deadlines", h.ListDeadlines)
-		r.Put("/deadlines/{id}", h.UpdateDeadline)
+			// Disclosure (per project)
+			r.Post("/projects/{id}/disclosure", h.CreateDisclosure)
+			r.Get("/projects/{id}/disclosure", h.GetDisclosure)
+			r.Put("/projects/{id}/disclosure", h.UpdateDisclosure)
 
-		// Documents
-		r.Get("/projects/{id}/documents", h.ListDocuments)
+			// Contract (per project)
+			r.Post("/projects/{id}/contract", h.CreateContract)
+			r.Get("/projects/{id}/contract", h.GetContract)
+
+			// Deadlines
+			r.Get("/projects/{id}/deadlines", h.ListDeadlines)
+			r.Put("/deadlines/{id}", h.UpdateDeadline)
+
+			// Documents
+			r.Get("/projects/{id}/documents", h.ListDocuments)
+			r.Post("/projects/{id}/documents/generate", h.GenerateDocument)
+			r.Get("/documents/{id}/download", h.DownloadDocument)
+		})
 	})
 
 	// Start server

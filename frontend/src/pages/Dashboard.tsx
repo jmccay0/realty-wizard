@@ -86,9 +86,23 @@ function Dashboard() {
         >
           ← Back to all transactions
         </button>
-        <h1 style={{ fontSize: '28px', marginBottom: '8px' }}>
-          {summary.project.property_address}
-        </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+          <h1 style={{ fontSize: '28px', margin: 0 }}>
+            {summary.project.property_address}
+          </h1>
+          <span style={{
+            display: 'inline-block',
+            padding: '6px 16px',
+            borderRadius: '20px',
+            fontSize: '14px',
+            fontWeight: 600,
+            backgroundColor: summary.project.user_role === 'buyer' ? 'var(--realwiz-green-50)' : 'var(--realwiz-blue-50)',
+            color: summary.project.user_role === 'buyer' ? 'var(--realwiz-green)' : 'var(--realwiz-blue)',
+            border: `2px solid ${summary.project.user_role === 'buyer' ? 'var(--realwiz-green)' : 'var(--realwiz-blue)'}`,
+          }}>
+            {summary.project.user_role === 'buyer' ? '🏠 Buyer' : '📋 Seller'}
+          </span>
+        </div>
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
           <span className={`badge badge-${
             summary.project.status === 'setup' ? 'info' :
@@ -120,7 +134,7 @@ function Dashboard() {
             {summary.property && !summary.contract && (
               <button
                 className="btn-primary"
-                onClick={() => alert('Contract entry form coming soon!')}
+                onClick={() => navigate(`/project/${id}/contract/new`)}
               >
                 Enter Contract Terms
               </button>
@@ -128,7 +142,7 @@ function Dashboard() {
             <button className="btn-secondary" onClick={() => navigate(`/project/${id}/wizard`)}>
               Edit Property Details
             </button>
-            <button className="btn-secondary" onClick={() => alert('Document generation coming in Phase 2!')}>
+            <button className="btn-secondary" onClick={() => navigate(`/project/${id}/documents`)}>
               View Documents
             </button>
           </div>

@@ -49,8 +49,15 @@ func init() {
 
 	log.Println("Database initialized successfully")
 
+	// Get JWT secret
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "development-secret-key-change-in-production"
+		log.Println("WARNING: Using default JWT_SECRET")
+	}
+
 	// Initialize handlers
-	h := handlers.NewHandler(store)
+	h := handlers.NewHandler(store, jwtSecret)
 
 	// Setup router (same as regular API)
 	r := chi.NewRouter()
@@ -103,6 +110,8 @@ func init() {
 
 		// Documents
 		r.Get("/projects/{id}/documents", h.ListDocuments)
+		r.Post("/projects/{id}/documents/generate", h.GenerateDocument)
+		r.Get("/documents/{id}/download", h.DownloadDocument)
 	})
 
 	// Create Lambda adapter

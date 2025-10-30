@@ -2,20 +2,51 @@ package models
 
 import "time"
 
-// Project represents a seller's transaction workflow
+// User represents an authenticated user
+type User struct {
+	ID           string    `json:"id"`
+	Email        string    `json:"email"`
+	PasswordHash string    `json:"-"` // Never serialize password hash
+	Name         string    `json:"name"`
+	Phone        string    `json:"phone"`
+	DefaultRole  string    `json:"default_role"` // "buyer", "seller", "admin"
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+// RefreshToken represents a refresh token for maintaining sessions
+type RefreshToken struct {
+	Token     string    `json:"token"`
+	UserID    string    `json:"user_id"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Revoked   bool      `json:"revoked"`
+}
+
+// ProjectParticipant represents a user's role in a specific project
+type ProjectParticipant struct {
+	ProjectID string    `json:"project_id"`
+	UserID    string    `json:"user_id"`
+	Role      string    `json:"role"` // "owner", "buyer", "seller", "agent"
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// Project represents a real estate transaction workflow (buyer or seller initiated)
 type Project struct {
-	ID                string    `json:"id"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
-	PropertyAddress   string    `json:"property_address"`
-	SellerNames       []string  `json:"seller_names"`
-	SellerEmail       string    `json:"seller_email"`
-	SellerPhone       string    `json:"seller_phone"`
-	HasAgent          bool      `json:"has_agent"`
-	AgentName         string    `json:"agent_name,omitempty"`
-	TitleCompany      string    `json:"title_company,omitempty"`
+	ID                string     `json:"id"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+	PropertyAddress   string     `json:"property_address"`
+	UserRole          string     `json:"user_role"` // "buyer" or "seller" - role of the user who created the project
+	SellerNames       []string   `json:"seller_names"`
+	SellerEmail       string     `json:"seller_email"`
+	SellerPhone       string     `json:"seller_phone"`
+	BuyerNames        []string   `json:"buyer_names,omitempty"` // Changed from single buyer_name to array
+	BuyerEmail        string     `json:"buyer_email,omitempty"`
+	BuyerPhone        string     `json:"buyer_phone,omitempty"`
+	HasAgent          bool       `json:"has_agent"`
+	AgentName         string     `json:"agent_name,omitempty"`
 	TargetListDate    *time.Time `json:"target_list_date,omitempty"`
-	Status            string    `json:"status"` // "setup", "listing_prep", "under_contract", "closing"
+	Status            string     `json:"status"` // "setup", "listing_prep", "under_contract", "closing"
+	OwnerUserID       *string    `json:"owner_user_id,omitempty"`
 }
 
 // Property holds property-specific details
