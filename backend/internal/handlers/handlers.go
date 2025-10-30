@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -68,16 +69,23 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.storage.CreateProject(&req); err != nil {
+		log.Printf("ERROR: Failed to create project: %v", err)
 		respondError(w, http.StatusInternalServerError, "Failed to create project")
 		return
 	}
 
-	// If auth is enabled, add user as owner participant
+	// If auth is enabled, add user as participant with their role
 	if userID != "" {
+		// Use the user_role from the project (buyer or seller)
+		participantRole := req.UserRole
+		if participantRole == "" {
+			participantRole = "owner" // Fallback to owner if not specified
+		}
+
 		participant := &models.ProjectParticipant{
 			ProjectID: req.ID,
 			UserID:    userID,
-			Role:      "owner",
+			Role:      participantRole, // Use the role from the project (buyer or seller)
 			CreatedAt: time.Now(),
 		}
 		if err := h.storage.CreateProjectParticipant(participant); err != nil {

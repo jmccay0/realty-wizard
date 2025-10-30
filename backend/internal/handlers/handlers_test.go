@@ -20,7 +20,7 @@ import (
 func setupTestHandler(t *testing.T) *Handler {
 	store, err := storage.NewSQLiteStorage(":memory:")
 	require.NoError(t, err)
-	return NewHandler(store)
+	return NewHandler(store, "test-jwt-secret")
 }
 
 // createTestProject creates a test project and returns its ID

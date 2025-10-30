@@ -3,9 +3,15 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getProject, createProperty, updateProperty, createDisclosure, updateDisclosure, getProperty, getDisclosure } from '../api';
 import type { Project, Property, Disclosure } from '../types';
 
-const STEPS = [
+const SELLER_STEPS = [
   { id: 1, label: 'Property Details' },
   { id: 2, label: 'Disclosure' },
+  { id: 3, label: 'Review' },
+];
+
+const BUYER_STEPS = [
+  { id: 1, label: 'Property Details' },
+  { id: 2, label: 'Offer Terms' },
   { id: 3, label: 'Review' },
 ];
 
@@ -14,6 +20,10 @@ function Wizard() {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   const [project, setProject] = useState<Project | null>(null);
+
+  // Determine steps based on user role
+  const steps = project?.user_role === 'buyer' ? BUYER_STEPS : SELLER_STEPS;
+  const isBuyer = project?.user_role === 'buyer';
   const [property, setProperty] = useState<Partial<Property>>({
     year_built: 0,
     legal_description: '',
@@ -109,17 +119,33 @@ function Wizard() {
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: '40px 20px' }}>
       {/* Header */}
       <div style={{ marginBottom: '32px' }}>
-        <h1 style={{ fontSize: '28px', marginBottom: '8px' }}>
-          {project?.property_address || 'Property Setup'}
-        </h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+          <h1 style={{ fontSize: '28px', margin: 0 }}>
+            {project?.property_address || 'Property Setup'}
+          </h1>
+          {project && (
+            <span style={{
+              display: 'inline-block',
+              padding: '6px 16px',
+              borderRadius: '20px',
+              fontSize: '14px',
+              fontWeight: 600,
+              backgroundColor: isBuyer ? 'var(--realwiz-green-50)' : 'var(--realwiz-blue-50)',
+              color: isBuyer ? 'var(--realwiz-green)' : 'var(--realwiz-blue)',
+              border: `2px solid ${isBuyer ? 'var(--realwiz-green)' : 'var(--realwiz-blue)'}`,
+            }}>
+              {isBuyer ? '🏠 Buyer' : '📋 Seller'}
+            </span>
+          )}
+        </div>
         <p style={{ color: 'var(--realwiz-gray-600)' }}>
-          Complete the following steps to prepare your transaction
+          Complete the following steps to prepare your {isBuyer ? 'purchase' : 'sale'}
         </p>
       </div>
 
       {/* Progress Indicator */}
       <div className="step-indicator">
-        {STEPS.map((step, index) => (
+        {steps.map((step: { id: number; label: string }, index: number) => (
           <div key={step.id} className={`step ${currentStep === step.id ? 'active' : ''} ${currentStep > step.id ? 'completed' : ''}`}>
             {index > 0 && <div className="step-line"></div>}
             <div className="step-circle">{step.id}</div>
@@ -256,7 +282,7 @@ function Wizard() {
         </div>
       )}
 
-      {currentStep === 2 && (
+      {currentStep === 2 && !isBuyer && (
         <div className="card">
           <h2 style={{ fontSize: '22px', marginBottom: '8px' }}>Seller's Disclosure</h2>
           <p style={{ color: 'var(--realwiz-gray-600)', marginBottom: '24px' }}>
@@ -423,6 +449,66 @@ function Wizard() {
               Back
             </button>
             <button className="btn-primary" onClick={handleDisclosureSubmit}>
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
+
+      {currentStep === 2 && isBuyer && (
+        <div className="card">
+          <h2 style={{ fontSize: '22px', marginBottom: '8px' }}>Offer Terms</h2>
+          <p style={{ color: 'var(--realwiz-gray-600)', marginBottom: '24px' }}>
+            Basic information about your offer (detailed contract terms come later)
+          </p>
+
+          <div className="alert alert-info" style={{ marginBottom: '24px' }}>
+            <div>
+              <strong>Note for Buyers</strong>
+              <p style={{ fontSize: '13px', marginTop: '4px' }}>
+                As a buyer, you'll work with the seller's disclosure information once it's provided.
+                For now, we'll collect your basic offer information.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '24px' }}>
+            <label className="label">Target Purchase Price</label>
+            <input
+              type="number"
+              className="input-field"
+              placeholder="350000"
+            />
+            <p className="help-text">Initial offer price (can be adjusted during negotiations)</p>
+          </div>
+
+          <div style={{ marginBottom: '24px' }}>
+            <label className="label">Preferred Closing Date</label>
+            <input
+              type="date"
+              className="input-field"
+            />
+            <p className="help-text">When you'd like to close on the property</p>
+          </div>
+
+          <div style={{ marginBottom: '24px' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="checkbox"
+                style={{ width: '18px', height: '18px' }}
+              />
+              <span className="label" style={{ marginBottom: 0 }}>I will need financing</span>
+            </label>
+            <p className="help-text" style={{ marginLeft: '26px' }}>
+              Check this if you'll be getting a mortgage
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: '12px', marginTop: '32px' }}>
+            <button className="btn-secondary" onClick={() => setCurrentStep(1)}>
+              Back
+            </button>
+            <button className="btn-primary" onClick={() => setCurrentStep(3)}>
               Continue
             </button>
           </div>

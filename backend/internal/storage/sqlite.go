@@ -66,12 +66,15 @@ func (s *SQLiteStorage) migrate() error {
 		created_at DATETIME NOT NULL,
 		updated_at DATETIME NOT NULL,
 		property_address TEXT NOT NULL,
+		user_role TEXT NOT NULL,
 		seller_names TEXT NOT NULL,
 		seller_email TEXT,
 		seller_phone TEXT,
+		buyer_names TEXT NOT NULL,
+		buyer_email TEXT,
+		buyer_phone TEXT,
 		has_agent BOOLEAN,
 		agent_name TEXT,
-		title_company TEXT,
 		target_list_date DATETIME,
 		status TEXT NOT NULL,
 		owner_user_id TEXT,
@@ -181,29 +184,49 @@ func (s *SQLiteStorage) migrate() error {
 
 // CreateProject inserts a new project
 func (s *SQLiteStorage) CreateProject(p *models.Project) error {
-	sellerNamesJSON, _ := json.Marshal(p.SellerNames)
-	_, err := s.db.Exec(`
-		INSERT INTO projects (id, created_at, updated_at, property_address, seller_names,
-			seller_email, seller_phone, has_agent, agent_name, title_company, target_list_date, status, owner_user_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.ID, p.CreatedAt, p.UpdatedAt, p.PropertyAddress, sellerNamesJSON,
-		p.SellerEmail, p.SellerPhone, p.HasAgent, p.AgentName, p.TitleCompany, p.TargetListDate, p.Status, p.OwnerUserID)
-	return err
+	// Ensure seller_names and buyer_names are at least empty arrays, not nil
+	if p.SellerNames == nil {
+		p.SellerNames = []string{}
+	}
+	if p.BuyerNames == nil {
+		p.BuyerNames = []string{}
+	}
+
+	sellerNamesJSON, err := json.Marshal(p.SellerNames)
+	if err != nil {
+		return fmt.Errorf("failed to marshal seller names: %w", err)
+	}
+
+	buyerNamesJSON, err := json.Marshal(p.BuyerNames)
+	if err != nil {
+		return fmt.Errorf("failed to marshal buyer names: %w", err)
+	}
+
+	_, err = s.db.Exec(`
+		INSERT INTO projects (id, created_at, updated_at, property_address, user_role, seller_names,
+			seller_email, seller_phone, buyer_names, buyer_email, buyer_phone, has_agent, agent_name, target_list_date, status, owner_user_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.ID, p.CreatedAt, p.UpdatedAt, p.PropertyAddress, p.UserRole, sellerNamesJSON,
+		p.SellerEmail, p.SellerPhone, buyerNamesJSON, p.BuyerEmail, p.BuyerPhone, p.HasAgent, p.AgentName, p.TargetListDate, p.Status, p.OwnerUserID)
+	if err != nil {
+		return fmt.Errorf("failed to insert project: %w", err)
+	}
+	return nil
 }
 
 // GetProject retrieves a project by ID
 func (s *SQLiteStorage) GetProject(id string) (*models.Project, error) {
 	var p models.Project
-	var sellerNamesJSON string
+	var sellerNamesJSON, buyerNamesJSON string
 	var targetListDate sql.NullTime
 	var ownerUserID sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, created_at, updated_at, property_address, seller_names,
-			seller_email, seller_phone, has_agent, agent_name, title_company, target_list_date, status, owner_user_id
+		SELECT id, created_at, updated_at, property_address, user_role, seller_names,
+			seller_email, seller_phone, buyer_names, buyer_email, buyer_phone, has_agent, agent_name, target_list_date, status, owner_user_id
 		FROM projects WHERE id = ?`, id).Scan(
-		&p.ID, &p.CreatedAt, &p.UpdatedAt, &p.PropertyAddress, &sellerNamesJSON,
-		&p.SellerEmail, &p.SellerPhone, &p.HasAgent, &p.AgentName, &p.TitleCompany, &targetListDate, &p.Status, &ownerUserID)
+		&p.ID, &p.CreatedAt, &p.UpdatedAt, &p.PropertyAddress, &p.UserRole, &sellerNamesJSON,
+		&p.SellerEmail, &p.SellerPhone, &buyerNamesJSON, &p.BuyerEmail, &p.BuyerPhone, &p.HasAgent, &p.AgentName, &targetListDate, &p.Status, &ownerUserID)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -213,6 +236,7 @@ func (s *SQLiteStorage) GetProject(id string) (*models.Project, error) {
 	}
 
 	json.Unmarshal([]byte(sellerNamesJSON), &p.SellerNames)
+	json.Unmarshal([]byte(buyerNamesJSON), &p.BuyerNames)
 	if targetListDate.Valid {
 		p.TargetListDate = &targetListDate.Time
 	}
@@ -226,22 +250,29 @@ func (s *SQLiteStorage) GetProject(id string) (*models.Project, error) {
 // UpdateProject updates an existing project
 func (s *SQLiteStorage) UpdateProject(p *models.Project) error {
 	p.UpdatedAt = time.Now()
-	sellerNamesJSON, _ := json.Marshal(p.SellerNames)
-	_, err := s.db.Exec(`
-		UPDATE projects SET updated_at = ?, property_address = ?, seller_names = ?,
-			seller_email = ?, seller_phone = ?, has_agent = ?, agent_name = ?,
-			title_company = ?, target_list_date = ?, status = ?, owner_user_id = ?
+	sellerNamesJSON, err := json.Marshal(p.SellerNames)
+	if err != nil {
+		return fmt.Errorf("failed to marshal seller names: %w", err)
+	}
+	buyerNamesJSON, err := json.Marshal(p.BuyerNames)
+	if err != nil {
+		return fmt.Errorf("failed to marshal buyer names: %w", err)
+	}
+	_, err = s.db.Exec(`
+		UPDATE projects SET updated_at = ?, property_address = ?, user_role = ?, seller_names = ?,
+			seller_email = ?, seller_phone = ?, buyer_names = ?, buyer_email = ?, buyer_phone = ?,
+			has_agent = ?, agent_name = ?, target_list_date = ?, status = ?, owner_user_id = ?
 		WHERE id = ?`,
-		p.UpdatedAt, p.PropertyAddress, sellerNamesJSON, p.SellerEmail, p.SellerPhone,
-		p.HasAgent, p.AgentName, p.TitleCompany, p.TargetListDate, p.Status, p.OwnerUserID, p.ID)
+		p.UpdatedAt, p.PropertyAddress, p.UserRole, sellerNamesJSON, p.SellerEmail, p.SellerPhone,
+		buyerNamesJSON, p.BuyerEmail, p.BuyerPhone, p.HasAgent, p.AgentName, p.TargetListDate, p.Status, p.OwnerUserID, p.ID)
 	return err
 }
 
 // ListProjects returns all projects
 func (s *SQLiteStorage) ListProjects() ([]*models.Project, error) {
 	rows, err := s.db.Query(`
-		SELECT id, created_at, updated_at, property_address, seller_names,
-			seller_email, seller_phone, has_agent, agent_name, title_company, target_list_date, status, owner_user_id
+		SELECT id, created_at, updated_at, property_address, user_role, seller_names,
+			seller_email, seller_phone, buyer_names, buyer_email, buyer_phone, has_agent, agent_name, target_list_date, status, owner_user_id
 		FROM projects ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -251,17 +282,18 @@ func (s *SQLiteStorage) ListProjects() ([]*models.Project, error) {
 	var projects []*models.Project
 	for rows.Next() {
 		var p models.Project
-		var sellerNamesJSON string
+		var sellerNamesJSON, buyerNamesJSON string
 		var targetListDate sql.NullTime
 		var ownerUserID sql.NullString
 
-		err := rows.Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt, &p.PropertyAddress, &sellerNamesJSON,
-			&p.SellerEmail, &p.SellerPhone, &p.HasAgent, &p.AgentName, &p.TitleCompany, &targetListDate, &p.Status, &ownerUserID)
+		err := rows.Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt, &p.PropertyAddress, &p.UserRole, &sellerNamesJSON,
+			&p.SellerEmail, &p.SellerPhone, &buyerNamesJSON, &p.BuyerEmail, &p.BuyerPhone, &p.HasAgent, &p.AgentName, &targetListDate, &p.Status, &ownerUserID)
 		if err != nil {
 			return nil, err
 		}
 
 		json.Unmarshal([]byte(sellerNamesJSON), &p.SellerNames)
+		json.Unmarshal([]byte(buyerNamesJSON), &p.BuyerNames)
 		if targetListDate.Valid {
 			p.TargetListDate = &targetListDate.Time
 		}
@@ -721,9 +753,9 @@ func (s *SQLiteStorage) ListProjectParticipants(projectID string) ([]*models.Pro
 // ListUserProjects retrieves all projects where user is a participant
 func (s *SQLiteStorage) ListUserProjects(userID string) ([]*models.Project, error) {
 	rows, err := s.db.Query(`
-		SELECT p.id, p.created_at, p.updated_at, p.property_address, p.seller_names,
-			p.seller_email, p.seller_phone, p.has_agent, p.agent_name, p.title_company,
-			p.target_list_date, p.status, p.owner_user_id
+		SELECT p.id, p.created_at, p.updated_at, p.property_address, p.user_role, p.seller_names,
+			p.seller_email, p.seller_phone, p.buyer_names, p.buyer_email, p.buyer_phone,
+			p.has_agent, p.agent_name, p.target_list_date, p.status, p.owner_user_id
 		FROM projects p
 		INNER JOIN project_participants pp ON p.id = pp.project_id
 		WHERE pp.user_id = ?
@@ -736,18 +768,19 @@ func (s *SQLiteStorage) ListUserProjects(userID string) ([]*models.Project, erro
 	var projects []*models.Project
 	for rows.Next() {
 		var p models.Project
-		var sellerNamesJSON string
+		var sellerNamesJSON, buyerNamesJSON string
 		var targetListDate sql.NullTime
 		var ownerUserID sql.NullString
 
-		err := rows.Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt, &p.PropertyAddress, &sellerNamesJSON,
-			&p.SellerEmail, &p.SellerPhone, &p.HasAgent, &p.AgentName, &p.TitleCompany,
-			&targetListDate, &p.Status, &ownerUserID)
+		err := rows.Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt, &p.PropertyAddress, &p.UserRole, &sellerNamesJSON,
+			&p.SellerEmail, &p.SellerPhone, &buyerNamesJSON, &p.BuyerEmail, &p.BuyerPhone,
+			&p.HasAgent, &p.AgentName, &targetListDate, &p.Status, &ownerUserID)
 		if err != nil {
 			return nil, err
 		}
 
 		json.Unmarshal([]byte(sellerNamesJSON), &p.SellerNames)
+		json.Unmarshal([]byte(buyerNamesJSON), &p.BuyerNames)
 		if targetListDate.Valid {
 			p.TargetListDate = &targetListDate.Time
 		}

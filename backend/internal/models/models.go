@@ -29,18 +29,21 @@ type ProjectParticipant struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// Project represents a seller's transaction workflow
+// Project represents a real estate transaction workflow (buyer or seller initiated)
 type Project struct {
 	ID                string     `json:"id"`
 	CreatedAt         time.Time  `json:"created_at"`
 	UpdatedAt         time.Time  `json:"updated_at"`
 	PropertyAddress   string     `json:"property_address"`
+	UserRole          string     `json:"user_role"` // "buyer" or "seller" - role of the user who created the project
 	SellerNames       []string   `json:"seller_names"`
 	SellerEmail       string     `json:"seller_email"`
 	SellerPhone       string     `json:"seller_phone"`
+	BuyerNames        []string   `json:"buyer_names,omitempty"` // Changed from single buyer_name to array
+	BuyerEmail        string     `json:"buyer_email,omitempty"`
+	BuyerPhone        string     `json:"buyer_phone,omitempty"`
 	HasAgent          bool       `json:"has_agent"`
 	AgentName         string     `json:"agent_name,omitempty"`
-	TitleCompany      string     `json:"title_company,omitempty"`
 	TargetListDate    *time.Time `json:"target_list_date,omitempty"`
 	Status            string     `json:"status"` // "setup", "listing_prep", "under_contract", "closing"
 	OwnerUserID       *string    `json:"owner_user_id,omitempty"`

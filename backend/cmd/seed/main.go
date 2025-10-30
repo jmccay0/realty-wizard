@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -14,14 +15,39 @@ import (
 func main() {
 	log.Println("Starting database seed...")
 
-	// Get database path
-	dataDir := "data"
-	dbPath := filepath.Join(dataDir, "realty-wizard.db")
+	// Initialize storage based on DB_TYPE
+	dbType := os.Getenv("DB_TYPE")
+	if dbType == "" {
+		dbType = "sqlite" // Default to SQLite
+	}
 
-	// Initialize storage
-	store, err := storage.NewSQLiteStorage(dbPath)
-	if err != nil {
-		log.Fatalf("Failed to initialize storage: %v", err)
+	var store storage.Storage
+	var err error
+
+	switch dbType {
+	case "postgres":
+		postgresURL := os.Getenv("POSTGRES_URL")
+		if postgresURL == "" {
+			log.Fatal("POSTGRES_URL environment variable required when DB_TYPE=postgres")
+		}
+		store, err = storage.NewPostgresStorage(postgresURL)
+		if err != nil {
+			log.Fatalf("Failed to initialize PostgreSQL storage: %v", err)
+		}
+		log.Printf("PostgreSQL database initialized")
+	case "sqlite":
+		dataDir := "data"
+		dbPath := os.Getenv("DB_PATH")
+		if dbPath == "" {
+			dbPath = filepath.Join(dataDir, "realty-wizard.db")
+		}
+		store, err = storage.NewSQLiteStorage(dbPath)
+		if err != nil {
+			log.Fatalf("Failed to initialize SQLite storage: %v", err)
+		}
+		log.Printf("SQLite database initialized at %s", dbPath)
+	default:
+		log.Fatalf("Invalid DB_TYPE: %s (must be 'sqlite' or 'postgres')", dbType)
 	}
 	defer store.Close()
 

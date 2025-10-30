@@ -29,21 +29,47 @@ func main() {
 		log.Println("WARNING: Using default JWT_SECRET. Set JWT_SECRET environment variable in production.")
 	}
 
-	// Ensure data directory exists
-	dataDir := "data"
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		log.Fatalf("Failed to create data directory: %v", err)
+	// Initialize storage based on DB_TYPE
+	dbType := os.Getenv("DB_TYPE")
+	if dbType == "" {
+		dbType = "sqlite" // Default to SQLite
 	}
 
-	// Initialize storage
-	dbPath := filepath.Join(dataDir, "realty-wizard.db")
-	store, err := storage.NewSQLiteStorage(dbPath)
-	if err != nil {
-		log.Fatalf("Failed to initialize storage: %v", err)
+	var store storage.Storage
+	var err error
+
+	switch dbType {
+	case "postgres":
+		postgresURL := os.Getenv("POSTGRES_URL")
+		if postgresURL == "" {
+			log.Fatal("POSTGRES_URL environment variable required when DB_TYPE=postgres")
+		}
+		store, err = storage.NewPostgresStorage(postgresURL)
+		if err != nil {
+			log.Fatalf("Failed to initialize PostgreSQL storage: %v", err)
+		}
+		log.Printf("PostgreSQL database initialized")
+	case "sqlite":
+		// Ensure data directory exists
+		dataDir := "data"
+		if err := os.MkdirAll(dataDir, 0755); err != nil {
+			log.Fatalf("Failed to create data directory: %v", err)
+		}
+
+		dbPath := os.Getenv("DB_PATH")
+		if dbPath == "" {
+			dbPath = filepath.Join(dataDir, "realty-wizard.db")
+		}
+		store, err = storage.NewSQLiteStorage(dbPath)
+		if err != nil {
+			log.Fatalf("Failed to initialize SQLite storage: %v", err)
+		}
+		log.Printf("SQLite database initialized at %s", dbPath)
+	default:
+		log.Fatalf("Invalid DB_TYPE: %s (must be 'sqlite' or 'postgres')", dbType)
 	}
 	defer store.Close()
 
-	log.Printf("Database initialized at %s", dbPath)
 	log.Printf("Auth enabled: %s", authEnabled)
 
 	// Initialize JWT manager and handlers

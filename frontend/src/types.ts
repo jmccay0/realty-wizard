@@ -3,12 +3,15 @@ export interface Project {
   created_at: string;
   updated_at: string;
   property_address: string;
+  user_role: 'buyer' | 'seller';
   seller_names: string[];
   seller_email: string;
   seller_phone: string;
+  buyer_names: string[];
+  buyer_email?: string;
+  buyer_phone?: string;
   has_agent: boolean;
   agent_name?: string;
-  title_company?: string;
   target_list_date?: string;
   status: 'setup' | 'listing_prep' | 'under_contract' | 'closing';
 }

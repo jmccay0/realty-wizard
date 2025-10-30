@@ -70,13 +70,21 @@ const ViewDocuments: React.FC = () => {
     return <div>Project not found</div>;
   }
 
+  const isBuyer = summary.project.user_role === 'buyer';
+
   const availableTemplates = [
-    { type: 'sellers_disclosure', name: "Seller's Disclosure Notice", formNumber: 'TREC OP-H', condition: !!summary.property },
-    { type: 'lead_paint', name: 'Lead-Based Paint Disclosure', formNumber: 'OP-L', condition: summary.property && summary.property.year_built < 1978 },
-    { type: 'residential_contract', name: 'One to Four Family Residential Contract', formNumber: 'TREC 20-18', condition: !!summary.contract },
-    { type: 'third_party_financing', name: 'Third Party Financing Addendum', formNumber: 'TREC 40-9', condition: summary.contract && summary.contract.buyer_financing },
-    { type: 'seller_lease', name: "Seller's Temporary Residential Lease", formNumber: 'TREC 15-6', condition: summary.contract && summary.contract.seller_stays_post_close },
-    { type: 'hoa_addendum', name: 'Addendum for Property Subject to Mandatory Membership in HOA', formNumber: 'TREC 36-10', condition: summary.property && summary.property.has_hoa },
+    // Seller-only documents
+    { type: 'sellers_disclosure', name: "Seller's Disclosure Notice", formNumber: 'TREC OP-H', condition: !!summary.property && !isBuyer, role: 'seller' },
+
+    // Shared documents (both buyer and seller)
+    { type: 'lead_paint', name: 'Lead-Based Paint Disclosure', formNumber: 'OP-L', condition: summary.property && summary.property.year_built < 1978, role: 'both' },
+    { type: 'residential_contract', name: 'One to Four Family Residential Contract', formNumber: 'TREC 20-18', condition: !!summary.contract, role: 'both' },
+    { type: 'third_party_financing', name: 'Third Party Financing Addendum', formNumber: 'TREC 40-9', condition: summary.contract && summary.contract.buyer_financing, role: 'both' },
+    { type: 'seller_lease', name: "Seller's Temporary Residential Lease", formNumber: 'TREC 15-6', condition: summary.contract && summary.contract.seller_stays_post_close, role: 'both' },
+    { type: 'hoa_addendum', name: 'Addendum for Property Subject to Mandatory Membership in HOA', formNumber: 'TREC 36-10', condition: summary.property && summary.property.has_hoa, role: 'both' },
+
+    // Buyer-specific documents (placeholder for future)
+    // { type: 'buyer_offer', name: 'Buyer Offer Letter', formNumber: 'Custom', condition: isBuyer, role: 'buyer' },
   ];
 
   const applicableTemplates = availableTemplates.filter(t => t.condition);
