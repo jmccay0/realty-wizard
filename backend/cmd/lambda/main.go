@@ -36,18 +36,38 @@ func init() {
 		}
 	}
 
-	log.Printf("Initializing database at %s", dbPath)
-
-	// Ensure directory exists
-	os.MkdirAll(filepath.Dir(dbPath), 0755)
-
-	// Initialize storage
-	store, err := storage.NewSQLiteStorage(dbPath)
-	if err != nil {
-		log.Fatalf("Failed to initialize storage: %v", err)
+	// Initialize storage based on DB_TYPE
+	dbType := os.Getenv("DB_TYPE")
+	if dbType == "" {
+		dbType = "sqlite" // Default to SQLite
 	}
 
-	log.Println("Database initialized successfully")
+	var store storage.Storage
+	var err error
+
+	switch dbType {
+	case "postgres":
+		postgresURL := os.Getenv("POSTGRES_URL")
+		if postgresURL == "" {
+			log.Fatal("POSTGRES_URL environment variable required when DB_TYPE=postgres")
+		}
+		store, err = storage.NewPostgresStorage(postgresURL)
+		if err != nil {
+			log.Fatalf("Failed to initialize PostgreSQL storage: %v", err)
+		}
+		log.Printf("PostgreSQL database initialized")
+	case "sqlite":
+		log.Printf("Initializing SQLite database at %s", dbPath)
+		// Ensure directory exists
+		os.MkdirAll(filepath.Dir(dbPath), 0755)
+		store, err = storage.NewSQLiteStorage(dbPath)
+		if err != nil {
+			log.Fatalf("Failed to initialize SQLite storage: %v", err)
+		}
+		log.Printf("SQLite database initialized at %s", dbPath)
+	default:
+		log.Fatalf("Invalid DB_TYPE: %s (must be 'sqlite' or 'postgres')", dbType)
+	}
 
 	// Get JWT secret
 	jwtSecret := os.Getenv("JWT_SECRET")
@@ -68,7 +88,7 @@ func init() {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://realty-wizard-1760549770.s3-website.us-east-2.amazonaws.com", "*"},
+		AllowedOrigins:   []string{"http://realty-wizard-1760549770.s3-website.us-east-2.amazonaws.com", "https://d2aoeuh4kpvz6c.cloudfront.net", "*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: false, // Must be false when using wildcard
@@ -77,11 +97,17 @@ func init() {
 
 	// Routes
 	r.Route("/api", func(r chi.Router) {
-		// Health check
+		// Health check (no auth required)
 		r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("OK"))
 		})
+
+		// Auth routes (no auth required)
+		r.Post("/register", h.Register)
+		r.Post("/login", h.Login)
+		r.Post("/refresh", h.RefreshToken)
+		r.Post("/logout", h.Logout)
 
 		// Projects
 		r.Get("/projects", h.ListProjects)
