@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import axios from 'axios';
 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+
 interface User {
   id: string;
   email: string;
@@ -58,7 +60,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (email: string, password: string) => {
     try {
-      const response = await axios.post('http://localhost:8080/api/login', {
+      const response = await axios.post(`${API_BASE_URL}/login`, {
         email,
         password,
       });
@@ -86,7 +88,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     defaultRole: string
   ) => {
     try {
-      const response = await axios.post('http://localhost:8080/api/register', {
+      const response = await axios.post(`${API_BASE_URL}/register`, {
         email,
         password,
         name,
@@ -113,7 +115,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       // Attempt to revoke refresh token on server
       if (refreshToken) {
-        await axios.post('http://localhost:8080/api/logout', {
+        await axios.post(`${API_BASE_URL}/logout`, {
           refresh_token: refreshToken,
         });
       }

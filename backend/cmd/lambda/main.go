@@ -88,10 +88,11 @@ func init() {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://realty-wizard-1760549770.s3-website.us-east-2.amazonaws.com", "https://d2aoeuh4kpvz6c.cloudfront.net", "*"},
+		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
-		AllowCredentials: false, // Must be false when using wildcard
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Requested-With"},
+		ExposedHeaders:   []string{"Content-Length"},
+		AllowCredentials: false,
 		MaxAge:           300,
 	}))
 
@@ -146,6 +147,20 @@ func init() {
 
 // Handler is the Lambda function handler
 func Handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+	// Handle OPTIONS requests for CORS preflight
+	if req.RequestContext.HTTP.Method == "OPTIONS" {
+		return events.APIGatewayV2HTTPResponse{
+			StatusCode: 200,
+			Headers: map[string]string{
+				"Access-Control-Allow-Origin":  "*",
+				"Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+				"Access-Control-Allow-Headers": "Content-Type,Authorization,Accept,X-Requested-With",
+				"Access-Control-Max-Age":       "300",
+			},
+			Body: "",
+		}, nil
+	}
+
 	// Convert V2 request to V1 for chi adapter
 	v1req := events.APIGatewayProxyRequest{
 		HTTPMethod: req.RequestContext.HTTP.Method,
@@ -162,10 +177,20 @@ func Handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.AP
 		}, err
 	}
 
-	// Convert V1 response to V2
+	// Convert V1 response to V2 and ensure CORS headers are present
+	headers := v1resp.Headers
+	if headers == nil {
+		headers = make(map[string]string)
+	}
+
+	// Force CORS headers for API Gateway V2
+	headers["Access-Control-Allow-Origin"] = "*"
+	headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
+	headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization,Accept,X-Requested-With"
+
 	return events.APIGatewayV2HTTPResponse{
 		StatusCode: v1resp.StatusCode,
-		Headers:    v1resp.Headers,
+		Headers:    headers,
 		Body:       v1resp.Body,
 	}, nil
 }
