@@ -109,3 +109,68 @@ type Document struct {
 	GeneratedAt *time.Time `json:"generated_at,omitempty"`
 	FilePath    string    `json:"file_path,omitempty"`
 }
+
+// Service represents a type of service offered in the marketplace
+type Service struct {
+	ID               string    `json:"id"`
+	Name             string    `json:"name"`
+	Category         string    `json:"category"` // "inspections", "contracts_title_legal", "repairs_trades"
+	Description      string    `json:"description"`
+	TypicalTimeline  string    `json:"typical_timeline,omitempty"`
+	EstimatedCostMin float64   `json:"estimated_cost_min,omitempty"`
+	EstimatedCostMax float64   `json:"estimated_cost_max,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+// Provider represents a business or individual offering a service
+type Provider struct {
+	ID                 string    `json:"id"`
+	ServiceID          string    `json:"service_id"`
+	BusinessName       string    `json:"business_name"`
+	ContactName        string    `json:"contact_name,omitempty"`
+	Email              string    `json:"email"`
+	Phone              string    `json:"phone"`
+	Address            string    `json:"address,omitempty"`
+	City               string    `json:"city,omitempty"`
+	State              string    `json:"state,omitempty"`
+	Zip                string    `json:"zip,omitempty"`
+	Bio                string    `json:"bio,omitempty"`
+	YearsExperience    int       `json:"years_experience,omitempty"`
+	LicenseNumber      string    `json:"license_number,omitempty"`
+	InsuranceVerified  bool      `json:"insurance_verified"`
+	AvailabilityStatus string    `json:"availability_status"` // "available", "limited", "unavailable"
+	RatingAverage      float64   `json:"rating_average"`
+	RatingCount        int       `json:"rating_count"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
+// ServiceRequest represents a user's request for a service
+type ServiceRequest struct {
+	ID              string    `json:"id"`
+	ProjectID       string    `json:"project_id,omitempty"`
+	UserEmail       string    `json:"user_email"`
+	UserName        string    `json:"user_name"`
+	UserPhone       string    `json:"user_phone,omitempty"`
+	ServiceID       string    `json:"service_id"`
+	ProviderID      string    `json:"provider_id,omitempty"`
+	PropertyAddress string    `json:"property_address,omitempty"`
+	RequestedDate   *time.Time `json:"requested_date,omitempty"`
+	PreferredTime   string    `json:"preferred_time,omitempty"`
+	Status          string    `json:"status"` // "pending", "matched", "scheduled", "completed", "cancelled"
+	Notes           string    `json:"notes,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// ProviderReview represents a user review of a provider
+type ProviderReview struct {
+	ID               string    `json:"id"`
+	ProviderID       string    `json:"provider_id"`
+	ServiceRequestID string    `json:"service_request_id"`
+	UserEmail        string    `json:"user_email"`
+	Rating           int       `json:"rating"` // 1-5 stars
+	ReviewText       string    `json:"review_text,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+}

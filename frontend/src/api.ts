@@ -43,3 +43,96 @@ export const updateDeadline = (id: string, data: Partial<Deadline>) =>
 
 // Documents
 export const listDocuments = (projectId: string) => api.get<Document[]>(`/projects/${projectId}/documents`);
+
+// Service Marketplace Types
+export interface Service {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  typical_timeline?: string;
+  estimated_cost_min?: number;
+  estimated_cost_max?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Provider {
+  id: string;
+  service_id: string;
+  business_name: string;
+  contact_name?: string;
+  email: string;
+  phone: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  bio?: string;
+  years_experience?: number;
+  license_number?: string;
+  insurance_verified: boolean;
+  availability_status: string;
+  rating_average: number;
+  rating_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ServiceRequest {
+  id: string;
+  project_id?: string;
+  user_email: string;
+  user_name: string;
+  user_phone?: string;
+  service_id: string;
+  provider_id?: string;
+  property_address?: string;
+  requested_date?: string;
+  preferred_time?: string;
+  status: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProviderReview {
+  id: string;
+  provider_id: string;
+  service_request_id: string;
+  user_email: string;
+  rating: number;
+  review_text?: string;
+  created_at: string;
+}
+
+// Service Marketplace API
+export const listServices = (category?: string) => {
+  const url = category ? `/services?category=${category}` : '/services';
+  return api.get<Service[]>(url);
+};
+
+export const getService = (id: string) => api.get<Service>(`/services/${id}`);
+
+export const listProviders = (serviceId: string) =>
+  api.get<Provider[]>(`/services/${serviceId}/providers`);
+
+export const getProvider = (id: string) => api.get<Provider>(`/providers/${id}`);
+
+export const listProviderReviews = (providerId: string) =>
+  api.get<ProviderReview[]>(`/providers/${providerId}/reviews`);
+
+export const createProviderReview = (providerId: string, data: Partial<ProviderReview>) =>
+  api.post<ProviderReview>(`/providers/${providerId}/reviews`, data);
+
+export const createServiceRequest = (data: Partial<ServiceRequest>) =>
+  api.post<ServiceRequest>('/service-requests', data);
+
+export const listServiceRequests = (userEmail: string) =>
+  api.get<ServiceRequest[]>(`/service-requests?user_email=${userEmail}`);
+
+export const getServiceRequest = (id: string) =>
+  api.get<ServiceRequest>(`/service-requests/${id}`);
+
+export const updateServiceRequest = (id: string, data: Partial<ServiceRequest>) =>
+  api.put<ServiceRequest>(`/service-requests/${id}`, data);

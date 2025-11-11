@@ -84,6 +84,18 @@ func main() {
 
 		// Documents
 		r.Get("/projects/{id}/documents", h.ListDocuments)
+
+		// Service Marketplace
+		r.Get("/services", h.ListServices)
+		r.Get("/services/{id}", h.GetService)
+		r.Get("/services/{serviceId}/providers", h.ListProviders)
+		r.Get("/providers/{id}", h.GetProvider)
+		r.Get("/providers/{providerId}/reviews", h.ListProviderReviews)
+		r.Post("/providers/{providerId}/reviews", h.CreateProviderReview)
+		r.Post("/service-requests", h.CreateServiceRequest)
+		r.Get("/service-requests", h.ListServiceRequests)
+		r.Get("/service-requests/{id}", h.GetServiceRequest)
+		r.Put("/service-requests/{id}", h.UpdateServiceRequest)
 	})
 
 	// Start server

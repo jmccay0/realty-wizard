@@ -139,6 +139,80 @@ func (s *SQLiteStorage) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_contracts_project ON contracts(project_id);
 	CREATE INDEX IF NOT EXISTS idx_deadlines_project ON deadlines(project_id);
 	CREATE INDEX IF NOT EXISTS idx_documents_project ON documents(project_id);
+
+	-- Service Marketplace Tables
+	CREATE TABLE IF NOT EXISTS services (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		category TEXT NOT NULL,
+		description TEXT NOT NULL,
+		typical_timeline TEXT,
+		estimated_cost_min REAL,
+		estimated_cost_max REAL,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS providers (
+		id TEXT PRIMARY KEY,
+		service_id TEXT NOT NULL,
+		business_name TEXT NOT NULL,
+		contact_name TEXT,
+		email TEXT NOT NULL,
+		phone TEXT NOT NULL,
+		address TEXT,
+		city TEXT,
+		state TEXT,
+		zip TEXT,
+		bio TEXT,
+		years_experience INTEGER,
+		license_number TEXT,
+		insurance_verified BOOLEAN DEFAULT FALSE,
+		availability_status TEXT DEFAULT 'available',
+		rating_average REAL DEFAULT 0,
+		rating_count INTEGER DEFAULT 0,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL,
+		FOREIGN KEY (service_id) REFERENCES services(id)
+	);
+
+	CREATE TABLE IF NOT EXISTS service_requests (
+		id TEXT PRIMARY KEY,
+		project_id TEXT,
+		user_email TEXT NOT NULL,
+		user_name TEXT NOT NULL,
+		user_phone TEXT,
+		service_id TEXT NOT NULL,
+		provider_id TEXT,
+		property_address TEXT,
+		requested_date DATETIME,
+		preferred_time TEXT,
+		status TEXT NOT NULL DEFAULT 'pending',
+		notes TEXT,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL,
+		FOREIGN KEY (project_id) REFERENCES projects(id),
+		FOREIGN KEY (service_id) REFERENCES services(id),
+		FOREIGN KEY (provider_id) REFERENCES providers(id)
+	);
+
+	CREATE TABLE IF NOT EXISTS provider_reviews (
+		id TEXT PRIMARY KEY,
+		provider_id TEXT NOT NULL,
+		service_request_id TEXT NOT NULL,
+		user_email TEXT NOT NULL,
+		rating INTEGER NOT NULL,
+		review_text TEXT,
+		created_at DATETIME NOT NULL,
+		FOREIGN KEY (provider_id) REFERENCES providers(id),
+		FOREIGN KEY (service_request_id) REFERENCES service_requests(id)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_providers_service ON providers(service_id);
+	CREATE INDEX IF NOT EXISTS idx_service_requests_project ON service_requests(project_id);
+	CREATE INDEX IF NOT EXISTS idx_service_requests_service ON service_requests(service_id);
+	CREATE INDEX IF NOT EXISTS idx_service_requests_provider ON service_requests(provider_id);
+	CREATE INDEX IF NOT EXISTS idx_provider_reviews_provider ON provider_reviews(provider_id);
 	`
 
 	_, err := s.db.Exec(schema)
@@ -540,6 +614,242 @@ func (s *SQLiteStorage) UpdateDocument(doc *models.Document) error {
 		WHERE id = ?`,
 		doc.Type, doc.FormNumber, doc.Status, doc.GeneratedAt, doc.FilePath, doc.ID)
 	return err
+}
+
+// ========== Service Marketplace Methods ==========
+
+// CreateService inserts a new service
+func (s *SQLiteStorage) CreateService(service *models.Service) error {
+	_, err := s.db.Exec(`
+		INSERT INTO services (id, name, category, description, typical_timeline, estimated_cost_min, estimated_cost_max, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		service.ID, service.Name, service.Category, service.Description, service.TypicalTimeline,
+		service.EstimatedCostMin, service.EstimatedCostMax, service.CreatedAt, service.UpdatedAt)
+	return err
+}
+
+// GetService retrieves a service by ID
+func (s *SQLiteStorage) GetService(id string) (*models.Service, error) {
+	var service models.Service
+	err := s.db.QueryRow(`
+		SELECT id, name, category, description, typical_timeline, estimated_cost_min, estimated_cost_max, created_at, updated_at
+		FROM services WHERE id = ?`, id).Scan(
+		&service.ID, &service.Name, &service.Category, &service.Description, &service.TypicalTimeline,
+		&service.EstimatedCostMin, &service.EstimatedCostMax, &service.CreatedAt, &service.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &service, nil
+}
+
+// ListServices retrieves all services
+func (s *SQLiteStorage) ListServices() ([]*models.Service, error) {
+	rows, err := s.db.Query(`
+		SELECT id, name, category, description, typical_timeline, estimated_cost_min, estimated_cost_max, created_at, updated_at
+		FROM services ORDER BY category, name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var services []*models.Service
+	for rows.Next() {
+		var service models.Service
+		if err := rows.Scan(&service.ID, &service.Name, &service.Category, &service.Description,
+			&service.TypicalTimeline, &service.EstimatedCostMin, &service.EstimatedCostMax,
+			&service.CreatedAt, &service.UpdatedAt); err != nil {
+			return nil, err
+		}
+		services = append(services, &service)
+	}
+	return services, nil
+}
+
+// ListServicesByCategory retrieves services by category
+func (s *SQLiteStorage) ListServicesByCategory(category string) ([]*models.Service, error) {
+	rows, err := s.db.Query(`
+		SELECT id, name, category, description, typical_timeline, estimated_cost_min, estimated_cost_max, created_at, updated_at
+		FROM services WHERE category = ? ORDER BY name`, category)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var services []*models.Service
+	for rows.Next() {
+		var service models.Service
+		if err := rows.Scan(&service.ID, &service.Name, &service.Category, &service.Description,
+			&service.TypicalTimeline, &service.EstimatedCostMin, &service.EstimatedCostMax,
+			&service.CreatedAt, &service.UpdatedAt); err != nil {
+			return nil, err
+		}
+		services = append(services, &service)
+	}
+	return services, nil
+}
+
+// CreateProvider inserts a new provider
+func (s *SQLiteStorage) CreateProvider(provider *models.Provider) error {
+	_, err := s.db.Exec(`
+		INSERT INTO providers (id, service_id, business_name, contact_name, email, phone, address, city, state, zip,
+			bio, years_experience, license_number, insurance_verified, availability_status, rating_average, rating_count, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		provider.ID, provider.ServiceID, provider.BusinessName, provider.ContactName, provider.Email, provider.Phone,
+		provider.Address, provider.City, provider.State, provider.Zip, provider.Bio, provider.YearsExperience,
+		provider.LicenseNumber, provider.InsuranceVerified, provider.AvailabilityStatus, provider.RatingAverage,
+		provider.RatingCount, provider.CreatedAt, provider.UpdatedAt)
+	return err
+}
+
+// GetProvider retrieves a provider by ID
+func (s *SQLiteStorage) GetProvider(id string) (*models.Provider, error) {
+	var provider models.Provider
+	err := s.db.QueryRow(`
+		SELECT id, service_id, business_name, contact_name, email, phone, address, city, state, zip,
+			bio, years_experience, license_number, insurance_verified, availability_status, rating_average, rating_count, created_at, updated_at
+		FROM providers WHERE id = ?`, id).Scan(
+		&provider.ID, &provider.ServiceID, &provider.BusinessName, &provider.ContactName, &provider.Email, &provider.Phone,
+		&provider.Address, &provider.City, &provider.State, &provider.Zip, &provider.Bio, &provider.YearsExperience,
+		&provider.LicenseNumber, &provider.InsuranceVerified, &provider.AvailabilityStatus, &provider.RatingAverage,
+		&provider.RatingCount, &provider.CreatedAt, &provider.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &provider, nil
+}
+
+// ListProviders retrieves all providers for a service
+func (s *SQLiteStorage) ListProviders(serviceID string) ([]*models.Provider, error) {
+	rows, err := s.db.Query(`
+		SELECT id, service_id, business_name, contact_name, email, phone, address, city, state, zip,
+			bio, years_experience, license_number, insurance_verified, availability_status, rating_average, rating_count, created_at, updated_at
+		FROM providers WHERE service_id = ? ORDER BY rating_average DESC, business_name`, serviceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var providers []*models.Provider
+	for rows.Next() {
+		var provider models.Provider
+		if err := rows.Scan(&provider.ID, &provider.ServiceID, &provider.BusinessName, &provider.ContactName,
+			&provider.Email, &provider.Phone, &provider.Address, &provider.City, &provider.State, &provider.Zip,
+			&provider.Bio, &provider.YearsExperience, &provider.LicenseNumber, &provider.InsuranceVerified,
+			&provider.AvailabilityStatus, &provider.RatingAverage, &provider.RatingCount,
+			&provider.CreatedAt, &provider.UpdatedAt); err != nil {
+			return nil, err
+		}
+		providers = append(providers, &provider)
+	}
+	return providers, nil
+}
+
+// UpdateProvider updates an existing provider
+func (s *SQLiteStorage) UpdateProvider(provider *models.Provider) error {
+	_, err := s.db.Exec(`
+		UPDATE providers SET business_name = ?, contact_name = ?, email = ?, phone = ?, address = ?, city = ?,
+			state = ?, zip = ?, bio = ?, years_experience = ?, license_number = ?, insurance_verified = ?,
+			availability_status = ?, rating_average = ?, rating_count = ?, updated_at = ?
+		WHERE id = ?`,
+		provider.BusinessName, provider.ContactName, provider.Email, provider.Phone, provider.Address,
+		provider.City, provider.State, provider.Zip, provider.Bio, provider.YearsExperience, provider.LicenseNumber,
+		provider.InsuranceVerified, provider.AvailabilityStatus, provider.RatingAverage, provider.RatingCount,
+		provider.UpdatedAt, provider.ID)
+	return err
+}
+
+// CreateServiceRequest inserts a new service request
+func (s *SQLiteStorage) CreateServiceRequest(request *models.ServiceRequest) error {
+	_, err := s.db.Exec(`
+		INSERT INTO service_requests (id, project_id, user_email, user_name, user_phone, service_id, provider_id,
+			property_address, requested_date, preferred_time, status, notes, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		request.ID, request.ProjectID, request.UserEmail, request.UserName, request.UserPhone, request.ServiceID,
+		request.ProviderID, request.PropertyAddress, request.RequestedDate, request.PreferredTime, request.Status,
+		request.Notes, request.CreatedAt, request.UpdatedAt)
+	return err
+}
+
+// GetServiceRequest retrieves a service request by ID
+func (s *SQLiteStorage) GetServiceRequest(id string) (*models.ServiceRequest, error) {
+	var request models.ServiceRequest
+	err := s.db.QueryRow(`
+		SELECT id, project_id, user_email, user_name, user_phone, service_id, provider_id,
+			property_address, requested_date, preferred_time, status, notes, created_at, updated_at
+		FROM service_requests WHERE id = ?`, id).Scan(
+		&request.ID, &request.ProjectID, &request.UserEmail, &request.UserName, &request.UserPhone, &request.ServiceID,
+		&request.ProviderID, &request.PropertyAddress, &request.RequestedDate, &request.PreferredTime, &request.Status,
+		&request.Notes, &request.CreatedAt, &request.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &request, nil
+}
+
+// ListServiceRequests retrieves all service requests for a user
+func (s *SQLiteStorage) ListServiceRequests(userEmail string) ([]*models.ServiceRequest, error) {
+	rows, err := s.db.Query(`
+		SELECT id, project_id, user_email, user_name, user_phone, service_id, provider_id,
+			property_address, requested_date, preferred_time, status, notes, created_at, updated_at
+		FROM service_requests WHERE user_email = ? ORDER BY created_at DESC`, userEmail)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var requests []*models.ServiceRequest
+	for rows.Next() {
+		var request models.ServiceRequest
+		if err := rows.Scan(&request.ID, &request.ProjectID, &request.UserEmail, &request.UserName, &request.UserPhone,
+			&request.ServiceID, &request.ProviderID, &request.PropertyAddress, &request.RequestedDate,
+			&request.PreferredTime, &request.Status, &request.Notes, &request.CreatedAt, &request.UpdatedAt); err != nil {
+			return nil, err
+		}
+		requests = append(requests, &request)
+	}
+	return requests, nil
+}
+
+// UpdateServiceRequest updates an existing service request
+func (s *SQLiteStorage) UpdateServiceRequest(request *models.ServiceRequest) error {
+	_, err := s.db.Exec(`
+		UPDATE service_requests SET provider_id = ?, property_address = ?, requested_date = ?,
+			preferred_time = ?, status = ?, notes = ?, updated_at = ?
+		WHERE id = ?`,
+		request.ProviderID, request.PropertyAddress, request.RequestedDate, request.PreferredTime,
+		request.Status, request.Notes, request.UpdatedAt, request.ID)
+	return err
+}
+
+// CreateProviderReview inserts a new provider review
+func (s *SQLiteStorage) CreateProviderReview(review *models.ProviderReview) error {
+	_, err := s.db.Exec(`
+		INSERT INTO provider_reviews (id, provider_id, service_request_id, user_email, rating, review_text, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		review.ID, review.ProviderID, review.ServiceRequestID, review.UserEmail, review.Rating, review.ReviewText, review.CreatedAt)
+	return err
+}
+
+// ListProviderReviews retrieves all reviews for a provider
+func (s *SQLiteStorage) ListProviderReviews(providerID string) ([]*models.ProviderReview, error) {
+	rows, err := s.db.Query(`
+		SELECT id, provider_id, service_request_id, user_email, rating, review_text, created_at
+		FROM provider_reviews WHERE provider_id = ? ORDER BY created_at DESC`, providerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var reviews []*models.ProviderReview
+	for rows.Next() {
+		var review models.ProviderReview
+		if err := rows.Scan(&review.ID, &review.ProviderID, &review.ServiceRequestID, &review.UserEmail,
+			&review.Rating, &review.ReviewText, &review.CreatedAt); err != nil {
+			return nil, err
+		}
+		reviews = append(reviews, &review)
+	}
+	return reviews, nil
 }
 
 // Close closes the database connection

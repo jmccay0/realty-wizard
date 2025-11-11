@@ -44,13 +44,25 @@ function Home() {
         </div>
       </div>
 
-      {/* New Project Button */}
-      <div style={{ marginBottom: '32px' }}>
+      {/* Action Buttons */}
+      <div style={{ marginBottom: '32px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
         <button
           className="btn-primary"
           onClick={() => navigate('/new')}
         >
           Start New Transaction
+        </button>
+        <button
+          className="btn-secondary"
+          onClick={() => navigate('/services')}
+        >
+          Find Service Providers
+        </button>
+        <button
+          className="btn-secondary"
+          onClick={() => navigate('/learn/trec-contract')}
+        >
+          📚 Learn About Texas Contracts
         </button>
       </div>
 

@@ -41,6 +41,29 @@ type Storage interface {
 	ListDocuments(projectID string) ([]*models.Document, error)
 	UpdateDocument(doc *models.Document) error
 
+	// Service Marketplace operations
+	// Service operations
+	CreateService(service *models.Service) error
+	GetService(id string) (*models.Service, error)
+	ListServices() ([]*models.Service, error)
+	ListServicesByCategory(category string) ([]*models.Service, error)
+
+	// Provider operations
+	CreateProvider(provider *models.Provider) error
+	GetProvider(id string) (*models.Provider, error)
+	ListProviders(serviceID string) ([]*models.Provider, error)
+	UpdateProvider(provider *models.Provider) error
+
+	// Service Request operations
+	CreateServiceRequest(request *models.ServiceRequest) error
+	GetServiceRequest(id string) (*models.ServiceRequest, error)
+	ListServiceRequests(userEmail string) ([]*models.ServiceRequest, error)
+	UpdateServiceRequest(request *models.ServiceRequest) error
+
+	// Provider Review operations
+	CreateProviderReview(review *models.ProviderReview) error
+	ListProviderReviews(providerID string) ([]*models.ProviderReview, error)
+
 	// Utility
 	Close() error
 }
