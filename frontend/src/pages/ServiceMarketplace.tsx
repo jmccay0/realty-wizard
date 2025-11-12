@@ -53,9 +53,10 @@ function ServiceMarketplace() {
     try {
       const category = selectedCategory === 'all' ? undefined : selectedCategory;
       const response = await listServices(category);
-      setServices(response.data);
+      setServices(response.data || []); // Handle null response
     } catch (error) {
       console.error('Failed to load services:', error);
+      setServices([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
